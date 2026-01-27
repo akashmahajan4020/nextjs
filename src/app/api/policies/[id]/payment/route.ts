@@ -4,15 +4,17 @@ import { getUserFromRequest } from '@/lib/auth';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await context.params;
+
     const user = await getUserFromRequest(request);
     if (!user) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
-    const policyId = parseInt(params.id);
+    const policyId = parseInt(id);
     const body = await request.json();
 
     const policy = await prisma.policy.findUnique({
@@ -23,7 +25,6 @@ export async function POST(
       return NextResponse.json({ message: 'Policy not found' }, { status: 404 });
     }
 
-    // Check if payment already exists
     const existingPayment = await prisma.payment.findUnique({
       where: { policyId },
     });
@@ -35,7 +36,6 @@ export async function POST(
       );
     }
 
-    // Create payment
     const payment = await prisma.payment.create({
       data: {
         policyId,
@@ -48,10 +48,9 @@ export async function POST(
       },
     });
 
-    // Generate invoice if payment successful
     if (payment.status === 'SUCCESS') {
       const invoiceNumber = `INV-${Date.now()}-${String(policyId).padStart(6, '0')}`;
-      
+
       await prisma.invoice.create({
         data: {
           policyId,
