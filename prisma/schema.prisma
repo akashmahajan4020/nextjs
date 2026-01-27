@@ -1,0 +1,382 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                Int          @id @default(autoincrement())
+  name              String
+  email             String       @unique
+  phone             String       @unique
+  password          String
+  role              Role         @default(CUSTOMER)
+  status            UserStatus   @default(ACTIVE)
+  emailVerifiedAt   DateTime?    @map("email_verified_at")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  agent             Agent?
+  customer          Customer?
+  policies          Policy[]     @relation("CustomerPolicies")
+  agentPolicies     Policy[]     @relation("AgentPolicies")
+  commissions       Commission[]
+  payouts           Payout[]
+  approvedPolicies  Policy[]     @relation("ApprovedPolicies")
+
+  @@map("users")
+}
+
+model Agent {
+  id                Int          @id @default(autoincrement())
+  userId            Int          @unique @map("user_id")
+  kycDocument       String?      @map("kyc_document")
+  panNumber         String?      @map("pan_number")
+  accountNumber     String?      @map("account_number")
+  ifscCode          String?      @map("ifsc_code")
+  commissionDefault Decimal      @default(10.00) @map("commission_default") @db.Decimal(5, 2)
+  status            AgentStatus  @default(PENDING)
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("agents")
+}
+
+model Customer {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @unique @map("user_id")
+  address     String?   @db.Text
+  city        String?
+  state       String?
+  pincode     String?
+  dateOfBirth DateTime? @map("date_of_birth") @db.Date
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("customers")
+}
+
+model InsuranceCategory {
+  id          Int           @id @default(autoincrement())
+  name        String
+  slug        String        @unique
+  description String?       @db.Text
+  icon        String?
+  status      Status        @default(ACTIVE)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  plans       InsurancePlan[]
+  addons      Addon[]
+  brands      Brand[]
+  pricingSlabs PricingSlab[]
+  policies    Policy[]
+
+  @@map("insurance_categories")
+}
+
+model InsurancePlan {
+  id             Int                @id @default(autoincrement())
+  categoryId     Int                @map("category_id")
+  name           String
+  description    String?            @db.Text
+  durationMonths Int                @map("duration_months")
+  features       Json?
+  status         Status             @default(ACTIVE)
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  category       InsuranceCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  policies       Policy[]
+
+  @@map("insurance_plans")
+}
+
+model Addon {
+  id          Int                @id @default(autoincrement())
+  categoryId  Int                @map("category_id")
+  name        String
+  description String?            @db.Text
+  priceType   PriceType          @map("price_type") @default(FIXED)
+  priceValue  Decimal            @map("price_value") @db.Decimal(10, 2)
+  status      Status             @default(ACTIVE)
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  category    InsuranceCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  policyAddons PolicyAddon[]
+
+  @@map("addons")
+}
+
+model Brand {
+  id         Int                @id @default(autoincrement())
+  categoryId Int                @map("category_id")
+  name       String
+  status     Status             @default(ACTIVE)
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+
+  category   InsuranceCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  models     DeviceModel[]
+  policyItems PolicyItem[]
+
+  @@map("brands")
+}
+
+model DeviceModel {
+  id          Int          @id @default(autoincrement())
+  brandId     Int          @map("brand_id")
+  name        String
+  status      Status       @default(ACTIVE)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  brand       Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  policyItems PolicyItem[]
+
+  @@map("models")
+}
+
+model PricingSlab {
+  id                 Int                @id @default(autoincrement())
+  categoryId         Int                @map("category_id")
+  minValue           Decimal            @map("min_value") @db.Decimal(10, 2)
+  maxValue           Decimal            @map("max_value") @db.Decimal(10, 2)
+  basePremium        Decimal            @map("base_premium") @db.Decimal(10, 2)
+  durationMultiplier Json               @map("duration_multiplier")
+  gstRate            Decimal            @default(18.00) @map("gst_rate") @db.Decimal(5, 2)
+  commissionPercent  Decimal            @default(10.00) @map("commission_percent") @db.Decimal(5, 2)
+  status             Status             @default(ACTIVE)
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  category           InsuranceCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@map("pricing_slabs")
+}
+
+model Policy {
+  id           Int           @id @default(autoincrement())
+  policyNumber String        @unique @map("policy_number")
+  categoryId   Int           @map("category_id")
+  planId       Int           @map("plan_id")
+  customerId   Int           @map("customer_id")
+  agentId      Int?          @map("agent_id")
+  status       PolicyStatus  @default(PENDING)
+  basePremium  Decimal       @map("base_premium") @db.Decimal(10, 2)
+  addonsTotal  Decimal       @default(0) @map("addons_total") @db.Decimal(10, 2)
+  discount     Decimal       @default(0) @db.Decimal(10, 2)
+  gstAmount    Decimal       @map("gst_amount") @db.Decimal(10, 2)
+  totalAmount  Decimal       @map("total_amount") @db.Decimal(10, 2)
+  approvedAt   DateTime?     @map("approved_at")
+  approvedBy   Int?          @map("approved_by")
+  startDate    DateTime?     @map("start_date") @db.Date
+  endDate      DateTime?     @map("end_date") @db.Date
+  rejectReason String?       @map("reject_reason") @db.Text
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  category     InsuranceCategory @relation(fields: [categoryId], references: [id])
+  plan         InsurancePlan     @relation(fields: [planId], references: [id])
+  customer     User              @relation("CustomerPolicies", fields: [customerId], references: [id])
+  agent        User?             @relation("AgentPolicies", fields: [agentId], references: [id])
+  approver     User?             @relation("ApprovedPolicies", fields: [approvedBy], references: [id])
+
+  items        PolicyItem[]
+  addons       PolicyAddon[]
+  documents    Document[]
+  payment      Payment?
+  invoice      Invoice?
+  commission   Commission?
+
+  @@map("policies")
+}
+
+model PolicyItem {
+  id            Int          @id @default(autoincrement())
+  policyId      Int          @map("policy_id")
+  itemType      String       @map("item_type")
+  brandId       Int?         @map("brand_id")
+  modelId       Int?         @map("model_id")
+  invoiceValue  Decimal      @map("invoice_value") @db.Decimal(10, 2)
+  purchaseDate  DateTime?    @map("purchase_date") @db.Date
+  serialNumber  String?      @map("serial_number")
+  details       Json?
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  policy        Policy       @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  brand         Brand?       @relation(fields: [brandId], references: [id])
+  model         DeviceModel? @relation(fields: [modelId], references: [id])
+
+  @@map("policy_items")
+}
+
+model PolicyAddon {
+  id        Int      @id @default(autoincrement())
+  policyId  Int      @map("policy_id")
+  addonId   Int      @map("addon_id")
+  price     Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  policy    Policy   @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  addon     Addon    @relation(fields: [addonId], references: [id])
+
+  @@map("policy_addons")
+}
+
+model Document {
+  id           Int          @id @default(autoincrement())
+  policyId     Int          @map("policy_id")
+  type         DocumentType
+  filepath     String
+  originalName String       @map("original_name")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  policy       Policy       @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@map("documents")
+}
+
+model Payment {
+  id             Int           @id @default(autoincrement())
+  policyId       Int           @unique @map("policy_id")
+  transactionId  String        @unique @map("transaction_id")
+  paymentMethod  String        @map("payment_method")
+  amount         Decimal       @db.Decimal(10, 2)
+  status         PaymentStatus @default(PENDING)
+  paidAt         DateTime?     @map("paid_at")
+  paymentDetails Json?         @map("payment_details")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  policy         Policy        @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model Invoice {
+  id            Int      @id @default(autoincrement())
+  policyId      Int      @unique @map("policy_id")
+  invoiceNumber String   @unique @map("invoice_number")
+  filepath      String
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  policy        Policy   @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@map("invoices")
+}
+
+model Commission {
+  id                Int              @id @default(autoincrement())
+  policyId          Int              @unique @map("policy_id")
+  agentId           Int              @map("agent_id")
+  premiumAmount     Decimal          @map("premium_amount") @db.Decimal(10, 2)
+  commissionPercent Decimal          @map("commission_percent") @db.Decimal(5, 2)
+  commissionAmount  Decimal          @map("commission_amount") @db.Decimal(10, 2)
+  status            CommissionStatus @default(PENDING)
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  policy            Policy           @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  agent             User             @relation(fields: [agentId], references: [id])
+
+  @@map("commissions")
+}
+
+model Payout {
+  id                   Int           @id @default(autoincrement())
+  agentId              Int           @map("agent_id")
+  amount               Decimal       @db.Decimal(10, 2)
+  status               PayoutStatus  @default(REQUESTED)
+  requestedAt          DateTime      @map("requested_at")
+  paidAt               DateTime?     @map("paid_at")
+  approvedBy           Int?          @map("approved_by")
+  transactionReference String?       @map("transaction_reference")
+  remarks              String?       @db.Text
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+
+  agent                User          @relation(fields: [agentId], references: [id])
+
+  @@map("payouts")
+}
+
+// Enums
+enum Role {
+  ADMIN
+  AGENT
+  CUSTOMER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+}
+
+enum AgentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+}
+
+enum PriceType {
+  FIXED
+  PERCENT
+}
+
+enum PolicyStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ACTIVE
+  EXPIRED
+}
+
+enum DocumentType {
+  INVOICE
+  IDENTITY
+  REGISTRATION
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum CommissionStatus {
+  PENDING
+  APPROVED
+  PAID
+}
+
+enum PayoutStatus {
+  REQUESTED
+  APPROVED
+  PAID
+  REJECTED
+}
+
+// package.json - add this to scripts section
+// "prisma": {
+//   "seed": "node prisma/seed.js"
+// }
