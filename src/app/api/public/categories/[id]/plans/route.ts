@@ -3,10 +3,11 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const categoryId = parseInt(params.id);
+    const { id } = await context.params;
+    const categoryId = parseInt(id);
 
     const plans = await prisma.insurancePlan.findMany({
       where: {
